@@ -1,0 +1,80 @@
+from PySide2 import QtWidgets
+import hou
+
+class PathReplaceDialog(QtWidgets.QDialog):
+    def __init__(self, parent=None):
+        super(PathReplaceDialog, self).__init__(parent)
+        
+        self.setWindowTitle("Replace Paths")
+        self.layout = QtWidgets.QVBoxLayout()
+        self.setLayout(self.layout)
+        
+        # Old path input
+        self.oldPathLabel = QtWidgets.QLabel("Old Path Prefix:")
+        self.oldPathInput = QtWidgets.QLineEdit("$HIP/asset/3D")
+        
+        # New path input
+        self.newPathLabel = QtWidgets.QLabel("New Path Prefix:")
+        self.newPathInput = QtWidgets.QLineEdit("$HIP/asset/2D")
+        
+        # Confirm button
+        self.confirmButton = QtWidgets.QPushButton("Preview Changes")
+        self.confirmButton.clicked.connect(self.preview_changes)
+        
+        # Add widgets to layout
+        self.layout.addWidget(self.oldPathLabel)
+        self.layout.addWidget(self.oldPathInput)
+        self.layout.addWidget(self.newPathLabel)
+        self.layout.addWidget(self.newPathInput)
+        self.layout.addWidget(self.confirmButton)
+
+    def preview_changes(self):
+        old_path = self.oldPathInput.text()
+        new_path = self.newPathInput.text()
+        changes_preview = gather_changes_preview(old_path, new_path)
+        
+        # Print confirmation dialog with changes preview to Houdini console
+        message = "Are you sure you want to make the following replacements?\n\n" + changes_preview
+        #print(message)
+        
+        # Close the dialog
+        self.close()
+        
+        # Show a simple confirmation dialog in Houdini without "Don't ask me again" checkbox
+        reply = hou.ui.displayMessage(message, buttons=('Yes', 'No'), default_choice=0, close_choice=1)
+        
+        # "Yes"
+        if reply == 0:  
+            self.accept()
+
+def gather_changes_preview(old_path, new_path):
+    preview_text = ""
+    selected_nodes = hou.selectedNodes()
+    for node in selected_nodes:
+        for parm in node.parms():
+            pt = parm.parmTemplate()
+            if pt.type() == hou.parmTemplateType.String and pt.fileType() is not None:
+                parm_value = parm.rawValue()
+                if parm_value.startswith(old_path):
+                    new_parm_value = parm_value.replace(old_path, new_path)
+                    preview_text += f"{parm_value} => {new_parm_value}\n"
+    return preview_text.strip()
+
+def replace_paths_on_selected_nodes(old_path, new_path):
+    selected_nodes = hou.selectedNodes()
+    for node in selected_nodes:
+        for parm in node.parms():
+            pt = parm.parmTemplate()
+            if pt.type() == hou.parmTemplateType.String and pt.fileType() is not None:
+                parm_value = parm.rawValue()
+                if parm_value.startswith(old_path):
+                    new_parm_value = parm_value.replace(old_path, new_path)
+                    parm.set(new_parm_value)
+                    print(parm_value, "=>", new_parm_value)
+
+# Show dialog and get user input
+dialog = PathReplaceDialog(hou.ui.mainQtWindow())
+if dialog.exec_():
+    old_path = dialog.oldPathInput.text()
+    new_path = dialog.newPathInput.text()
+    replace_paths_on_selected_nodes(old_path, new_path)
